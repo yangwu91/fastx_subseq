@@ -20,7 +20,7 @@ E00247:343:HYMLVCCXX:8:1101:2656:67058
 
 ### Note:
 If few subseqs need to be extracted from a FASTA file, I suggest to use [samtools](https://github.com/samtools/samtools):  
-> $ samtools faidx INPUT_FASTA　　　　　　　　　　　　　　　　# Build an index for your FASTA file first.  
+> $ samtools faidx INPUT_FASTA　　　　　　　　　　　　　　　 # Build an index for your FASTA file first.  
 > $ samtools faidx INPUT_FASTA SEQ_NAME > OUTPUT_FASTA　　 # Extract the subseq.
 
 ## License
