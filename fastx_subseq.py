@@ -1,18 +1,24 @@
 #!/usr/bin/env python
 
 print "\n# Warning: This script is memeory-consuming! #"
-import sys, re, os
-#import my_lib.ProcessingBar.ProcessingBar as PB
+import sys, re, os, commands
 from copy import deepcopy
+from ProcessingBar import Bar
 
 if __name__ == '__main__':
 	try:
-		input_fastx, seqname_listfile = sys.argv[1], sys.argv[2]
+		input_fastx, seqname_listfile=sys.argv[1], sys.argv[2]
+		total_job=int(commands.getoutput('wc -l < %s' % seqname_listfile))
 	except IndexError:
 		print 'Require arguements!'
 		quit()
+	if '-v' in sys.argv:
+		verbose=True
+	else:
+		verbose=False
 	with open(input_fastx, 'r') as inputfile:
-		print 'Initializing...'
+		if verbose:
+			print 'Initializing...'
 		mate_pattern=re.compile(r'[-/\_.]([12])$')
 		firstline=inputfile.readline().strip().split()[0]
 		sig=firstline[0]
@@ -20,6 +26,7 @@ if __name__ == '__main__':
 			mate=False
 		else:
 			mate=True
+	os.system(r'mkdir -p ./extract_sequences/ && rm -f ./extract_sequences/%s' % os.path.split(input_fastx)[-1])
 	with open(input_fastx, 'r') as inputfile:
 		fastqa_dict={}
 		if sig=='@':	
@@ -64,9 +71,11 @@ if __name__ == '__main__':
 			print 'It seems not a standard FASTA/FASTQ file. Please check your input.'
 			quit()	
 	with open(seqname_listfile, 'r') as inputfile:
-		print 'Extracting...'
-		os.system(r'mkdir -p ./extract_sequences/ && rm -f ./extract_sequences/%s' % os.path.split(input_fastx)[-1])
+		if verbose:
+			print 'Extracting...'
+		n=0
 		for seqname in inputfile:
+			n+=1
 			seqname=seqname.strip().split()[0]
 			if seqname[0]=='>' or seqname[0]=='@':
 				seqname=seqname[1:]
@@ -81,8 +90,10 @@ if __name__ == '__main__':
 						outputline='\n'.join(fastqa_dict.get(seqname).get(pair_num[0])) + '\n'
 						outputfile.write(outputline)
 				except:
-					with open('./extract_sequences/no-hits.list', 'a') as outputfile:
+					with open('./extract_sequences/NoHits-%s.list' % os.path.split(input_fastx)[-1], 'a') as outputfile:
 						outputfile.write(seqname + '\n')
-						print 'Not found: %s' % seqname
-	print 'All done.'	
-
+						#print 'Not found: %s' % seqname
+			if verbose:
+				Bar(n, total_job)
+	if verbose:
+		print '\nAll done.'

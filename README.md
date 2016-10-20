@@ -4,7 +4,9 @@ This script can extract FASTA/Q subseq **extremely fast** but **consumes memory*
 ## Methods
 ### Commands:
 ```Bash
-$ python fastx_subseq.py INPUT SEQ_NAME_LIST
+```
+or
+```Bash
 ```
 
 ### Formats:
