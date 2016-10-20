@@ -9,7 +9,8 @@ $ python fastx_subseq.py INPUT SEQ_NAME_LIST     # No detailed information print
 or
 ```Bash
 $ python fastx_subseq.py INPUT SEQ_NAME_LIST -v  # If the option "-v" exsists, the script will print detailed process infomation.
-
+```
+```
 # Warning: This script is memeory-consuming! #
 Initializing...
 Extracting...
