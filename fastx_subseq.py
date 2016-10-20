@@ -5,17 +5,8 @@ import sys, re, os, commands
 from copy import deepcopy
 from ProcessingBar import Bar
 
-if __name__ == '__main__':
-	try:
-		input_fastx, seqname_listfile=sys.argv[1], sys.argv[2]
-		total_job=int(commands.getoutput('wc -l < %s' % seqname_listfile))
-	except IndexError:
-		print 'Require arguements!'
-		quit()
-	if '-v' in sys.argv:
-		verbose=True
-	else:
-		verbose=False
+def ExrtactSeq(input_fastx, seqname_listfile, verbose=False):
+	total_job=int(commands.getoutput('wc -l < %s' % seqname_listfile))
 	with open(input_fastx, 'r') as inputfile:
 		if verbose:
 			print 'Initializing...'
@@ -97,3 +88,16 @@ if __name__ == '__main__':
 				Bar(n, total_job)
 	if verbose:
 		print '\nAll done.'
+
+# Main Sub
+if __name__ == '__main__':
+	try:
+		input_fastx, seqname_listfile=sys.argv[1], sys.argv[2]	
+	except IndexError:
+		print 'Require arguements!'
+		quit()
+	if '-v' in sys.argv:
+		verbose=True
+	else:
+		verbose=False
+	ExrtactSeq(input_fastx, seqname_listfile, verbose=verbose)
