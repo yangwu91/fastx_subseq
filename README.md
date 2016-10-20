@@ -7,7 +7,7 @@ This script can extract FASTA/Q subseq **extremely fast** but **consumes memory*
 $ python fastx_subseq.py INPUT SEQ_NAME_LIST  # No detailed information printed.
 ```
 or
-```Bash
+```
 $ python fastx_subseq.py INPUT SEQ_NAME_LIST -v
 
 # Warning: This script is memeory-consuming! #
