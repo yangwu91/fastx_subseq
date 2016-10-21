@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-print "\n# Warning: This script is memeory-consuming! #"
 import sys, re, os, commands
 from copy import deepcopy
 from ProcessingBar import Bar
@@ -98,6 +97,7 @@ if __name__ == '__main__':
 		quit()
 	if '-v' in sys.argv:
 		verbose=True
+		print "\n# Warning: This script is memeory-consuming! #"
 	else:
 		verbose=False
 	ExrtactSeq(input_fastx, seqname_listfile, verbose=verbose)
