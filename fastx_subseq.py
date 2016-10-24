@@ -84,7 +84,7 @@ def ExrtactSeq(input_fastx, seqname_listfile, verbose=False):
 						outputfile.write(seqname + '\n')
 						#print 'Not found: %s' % seqname
 			if verbose:
-				Bar(n, total_job)
+				Bar(n, total_job, bar_size=80, left_indentation=4)
 	if verbose:
 		print '\nAll done.'
 
