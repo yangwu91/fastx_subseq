@@ -1,103 +1,193 @@
-#!/usr/bin/env python
+#!/usr/bin/env pypy
 
 import sys, re, os, commands
+import gc # garbage collector
 from copy import deepcopy
+from subprocess import check_call as CC
 from ProcessingBar import Bar
+#from glob import glob # support wildcard
+from datetime import datetime
+from Argv import ArgvToDict as ATD
 
-def ExrtactSeq(input_fastx, seqname_listfile, verbose=False):
-	total_job=int(commands.getoutput('wc -l < %s' % seqname_listfile))
-	with open(input_fastx, 'r') as inputfile:
-		if verbose:
-			print 'Initializing...'
-		mate_pattern=re.compile(r'[-/\_.]([12])$')
-		firstline=inputfile.readline().strip().split()[0]
-		sig=firstline[0]
-		if len(re.findall(mate_pattern, firstline))==0:# and len(re.findall(mate_pattern, firstline.split()[0]))==0:
-			mate=False
-		else:
-			mate=True
-	os.system(r'mkdir -p ./extract_sequences/ && rm -f ./extract_sequences/%s' % os.path.split(input_fastx)[-1])
-	with open(input_fastx, 'r') as inputfile:
-		fastqa_dict={}
-		if sig=='@':	
-			while True:
-				fastqa1=inputfile.readline().strip()
-				fastqa2=inputfile.readline().strip()
-				fastqa3=inputfile.readline().strip()
-				fastqa4=inputfile.readline().strip()
-				if fastqa1=='' or fastqa2=='' or fastqa3=='' or fastqa4=='':
+# TODO: class
+
+class Fastx:
+	"""An example:
+	
+	import sys
+	sys.path.append('/path/to/fastx_subseq/')  # If necessary.
+	from fastx_subseq import Fastx 
+	f = Fastx(FASTX_file, verbose=True)        # To process verbosely, set "verbose=True" (default).
+	f.ExtractInfo()                            # To extract the FASTX's info (consumes memory).
+	f.FetchSeq(query_list, outdir)             # To fetch sequences.
+	f.ReleaseMemory()                          # Recommended."""
+	
+	global mate_p
+	mate_p = re.compile(r'[-/._]([12])$')
+	
+	def __init__(self, infastx, verbose=True):
+		self.infastx = infastx
+		self.verbose = verbose
+		self.fastx_dict = {}
+		if self.verbose:
+			print '    Initializing...'	
+
+	def __CheckFastx(self, level=5):
+		assert type(level) == int and level >= 1
+		with open(self.infastx, 'r') as inf:
+			n, fasta_num, fastq_num, mate_num = 0, 0, 0, 0
+			for i in xrange(level):
+				line = inf.readline().strip().split()[0]
+				if len(line) == 0:
 					break
-				fastqa_name=fastqa1.split()[0]
-				if mate:
-					pair_num=int(re.findall(mate_pattern, fastqa_name)[0])
-					if fastqa_dict.has_key(fastqa_name[1:-2]):
-						fastqa_dict[fastqa_name[1:-2]].update({pair_num:[fastqa1, fastqa2, fastqa3, fastqa4]})
-					else:
-						fastqa_dict[fastqa_name[1:-2]]=deepcopy({pair_num:[fastqa1, fastqa2, fastqa3, fastqa4]})
-				else:
-					if fastqa_dict.has_key(fastqa_name[1:]):
-						fastqa_dict[fastqa_name[1:]].update({2:[fastqa1, fastqa2,fastqa3,fastqa4]})
-					else:
-						fastqa_dict.update({fastqa_name[1:]:{1:[fastqa1, fastqa2, fastqa3, fastqa4]}})			
-		elif sig=='>':
-			all_fasta=inputfile.read().strip().strip('>').split('\n>')
-			for e in all_fasta:
-				e=e.strip().split('\n', 1)
-				fastqa1=e[0]
-				fastqa2=e[-1].replace('\n', '')
-				fastqa_name=fastq1.split()
-				if mate:
-					pair_num=int(re.findall(mate_pattern, fastqa1)[0])
-					if fastqa_dict.has_key(fastqa_name[:-2]):
-						fastqa_dict[fastqa_name[:-2]].update({pair_num:['>'+fastqa1, fastqa2]})
-					else:
-						fastqa_dict[fastqa_name[:-2]]=deepcopy({pair_num:['>'+fastqa1, fastqa2]})
-				else:
-					if fastqa_dict.has_key(fastqa1):
-						fastqa_dict[fastqa_name].update({2:['>' + fastqa1, fastqa2]})
-					else:
-						fastqa_dict[fastqa_name]=deepcopy({1:['>' + fastqa1, fastqa2]})
+				if i % 2 == 0:
+					n += 1
+					sig = line[0]
+					if sig == '@' or sig == '+':
+						fastq_num += 1
+					elif sig == '>':
+						fasta_num += 1
+					if re.findall(mate_p, line) != []:
+						mate_num += 1
+		if n == fastq_num:
+			fmt = 'fastq'
+		elif n == fasta_num:
+			fmt = 'fasta'
 		else:
-			print 'It seems not a standard FASTA/FASTQ file. Please check your input.'
-			quit()	
-	with open(seqname_listfile, 'r') as inputfile:
-		if verbose:
-			print 'Extracting...'
-		n=0
-		for seqname in inputfile:
-			n+=1
-			seqname=seqname.strip().split()[0]
-			if seqname[0]=='>' or seqname[0]=='@':
-				seqname=seqname[1:]
-			pair_num=re.findall(mate_pattern, seqname)
-			with open('./extract_sequences/%s' % os.path.split(input_fastx)[-1], 'a') as outputfile:
-				try:
-					if len(pair_num)==0:
-						for fastqa in fastqa_dict.get(seqname).values():
-							outputline='\n'.join(fastqa) + '\n'
-							outputfile.write(outputline)
+			fmt = 'E'
+		if n == mate_num:
+			self.mate = True
+		else:
+			self.mate = False
+		return fmt
+	
+	def __FastqInfo(self):
+		with open(self.infastx, 'r') as inputfile:
+			while True:
+				fastq1 = inputfile.readline().strip()
+				fastq2 = inputfile.readline().strip()
+				fastq3 = inputfile.readline().strip()
+				fastq4 = inputfile.readline().strip()
+				if fastq1 == '' or fastq2 == '' or fastq3 == '' or fastq4 == '':
+					break
+				fastq_name = fastq1.split()[0]
+				if self.mate:
+					pair_num = int(re.findall(mate_p, fastq_name)[0])
+					if self.fastx_dict.has_key(fastq_name[1:-2]):
+						self.fastx_dict[fastq_name[1:-2]].update({pair_num: [fastq1, fastq2, fastq3, fastq4]})
 					else:
-						outputline='\n'.join(fastqa_dict.get(seqname).get(pair_num[0])) + '\n'
-						outputfile.write(outputline)
-				except:
-					with open('./extract_sequences/NoHits-%s.list' % os.path.split(input_fastx)[-1], 'a') as outputfile:
-						outputfile.write(seqname + '\n')
-						#print 'Not found: %s' % seqname
-			if verbose:
-				Bar(n, total_job, bar_size=80, left_indentation=4)
-	if verbose:
-		print '\nAll done.'
+						self.fastx_dict[fastq_name[1:-2]] = deepcopy({pair_num: [fastq1, fastq2, fastq3, fastq4]})
+				else:
+					if self.fastx_dict.has_key(fastq_name[1:]):
+						self.fastx_dict[fastq_name[1:]].update({2: [fastq1, fastq2,fastq3,fastq4]})
+					else:
+						self.fastx_dict.update({fastq_name[1:]:{1: [fastq1, fastq2, fastq3, fastq4]}})					
+
+	def __FastaInfo(self):
+		with open(self.infastx, 'r') as inputfile:
+			all_fasta = inputfile.read().strip().strip('>').split('\n>')
+			for contig in all_fasta:
+				contig = contig.strip().split('\n', 1)
+				fasta1 = contig[0]
+				fasta2 = contig[-1].replace('\n', '')
+				fasta_name = fasta1.split()[0]
+				if self.mate:
+					pair_num = int(re.findall(mate_p, fasta1)[0])
+					if self.fastx_dict.has_key(fasta_name[:-2]):
+						self.fastx_dict[fasta_name[:-2]].update({pair_num: ['>'+fasta1, fasta2]})
+					else:
+						self.fastx_dict[fasta_name[:-2]] = deepcopy({pair_num: ['>'+fasta1, fasta2]})
+				else:
+					if self.fastx_dict.has_key(fasta_name):
+						self.fastx_dict[fasta_name].update({2: ['>' + fasta1, fasta2]})
+					else:
+						self.fastx_dict[fasta_name] = deepcopy({1: ['>' + fasta1, fasta2]})			
+
+	def ExrtactInfo(self, returned=False):
+		assert type(returned) == bool
+		fmt = self.__CheckFastx()
+		if fmt == 'fastq':
+			self.__FastqInfo()
+		elif fmt == 'fasta':
+			self.__FastaInfo()
+		else:
+			self.fastx_dict = {}
+			print '    It seems not a standard FASTA/FASTQ file. Please check your input.'
+		if returned:
+			return self.fastx_dict
+		
+	def FetchSeq(self, seqname_list, outdir='./extracted_sequences'):
+		total_job = int(commands.getoutput('wc -l < %s' % seqname_list))
+		CC(r'mkdir -p %s' % outdir, shell=True)
+		outf_name = '%s/%s' % (outdir, os.path.split(self.infastx)[-1])
+		if os.path.isfile(outf_name):
+			CC('rm -f %s' % outf_name, shell=True)		
+		with open(seqname_list, 'r') as inf:
+			if self.verbose:
+				print '    Fetching to "%s"...' % outdir
+			n, pre_process = 0, -1
+			for seqname in inf:
+				n += 1
+				seqname = seqname.strip().split()[0]
+				if len(seqname) > 0 and seqname[0] <> '#':		
+					if seqname[0] == '>' or seqname[0] == '@':
+						seqname = seqname[1:]
+					pair_num = re.findall(mate_p, seqname)
+					fastx_dict_values = self.fastx_dict.get(seqname)		
+					if fastx_dict_values != None:
+						with open(outf_name, 'a') as outf:
+							if len(pair_num) == 0:
+								for fastx in fastx_dict_values.itervalues():
+									outf.write('\n'.join(fastx) + '\n')
+							else:
+								outf.write('\n'.join(fastx_dict_values.get(pair_num[0])) + '\n')
+					else:
+						with open('%s/NoHits-%s.list' % (outdir, os.path.split(self.infastx)[-1]), 'a') as outf:
+							outf.write(seqname + '\n')
+							#print 'Not found: %s' % seqname
+					if self.verbose:
+						process = int(1000.0*n/total_job)/10.0
+						if pre_process < process: # reduce redundant output
+							Bar(n, total_job, bar_size = 80, left_indentation = 4)
+						pre_process = process
+			print ''	
+
+	def ReleaseMemory(self):
+		"""For multiple input files, this method is recommended."""
+		del self.fastx_dict
+		gc.collect()
+
+def HelpMsg():
+	print '''
+Commands:
+pypy fastx_subseq.py -f FASTA/Q -l query_list -v
+# Support wildcard. 
+# Mutiple input files could be seperated by a comma without space.
+'''
 
 # Main Sub
 if __name__ == '__main__':
-	try:
-		input_fastx, seqname_listfile=sys.argv[1], sys.argv[2]	
-	except IndexError:
-		print 'Require arguements!'
+	args = ATD(argv_list = sys.argv, required = ['-f', '-l'], optional = {'-v':False, '-h':False, '-o':'./extracted_sequences'})
+	#print args
+	if args.get('-h') or args == {}:
+		HelpMsg()
 		quit()
-	if '-v' in sys.argv:
-		verbose=True
+	infastx, seqname_list, verbose, outdir = args.get('-f'), args.get('-l'), args.get('-v'), args.get('-o')
+	if verbose:
 		print "\n# Warning: This script is memeory-consuming! #"
-	else:
-		verbose=False
-	ExrtactSeq(input_fastx, seqname_listfile, verbose=verbose)
+	i = 0
+	if type(infastx) != list:
+		infastx = [infastx, ]
+	for in_file in infastx:
+		i += 1
+		if verbose:
+			start_time = datetime.now()
+			print '(%s/%s) Extracting from "%s":' % (str(i), str(len(infastx)), os.path.split(in_file)[-1])
+		fastx = Fastx(in_file, verbose)
+		fastx.ExrtactInfo()
+		fastx.FetchSeq(seqname_list, outdir)
+		if verbose:
+			end_time = datetime.now()
+			print '    Done in %ss.' % (end_time-start_time).seconds
+		fastx.ReleaseMemory()
+	print 'All done.\n'
