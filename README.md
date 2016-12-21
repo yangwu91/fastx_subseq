@@ -16,7 +16,7 @@ Extracting...
     [================================================================================]  Processing 100.0%... 
 All done.
 ```
-All extracted sequences will be put in a generated fold named `extract_sequences` in **current work directory**. Make sure you have permission.
+Without a specified "-o" option, all extracted sequences will be put in a fold named `extracted_sequences` in **current work directory** in default. Make sure you have permission.
 ### Imported as a Python module:
 An example:
 ```Python
@@ -26,7 +26,7 @@ from fastx_subseq import Fastx
 f = Fastx(FASTX, verbose=True)             # To process verbosely, set "verbose=True" (default).
 f.ExtractInfo()                            # To extract the FASTX's info (consumes memory).
 f.FetchSeq(SEQ_NAME_LIST, OUT_DIR)         # To fetch sequences.
-f.ReleaseMemory()                          # Recommended."""
+f.ReleaseMemory()                          # Recommended.
 ```
 For more details:
 ```Python
