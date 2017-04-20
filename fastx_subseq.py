@@ -9,8 +9,6 @@ from ProcessingBar import Bar
 from datetime import datetime
 from Argv import ArgvToDict as ATD
 
-# TODO: class
-
 class Fastx:
 	"""An example:
 	
@@ -23,7 +21,10 @@ class Fastx:
 	f.ReleaseMemory()                          # Recommended."""
 	
 	global mate_p
-	mate_p = re.compile(r'[-/._]([12])$')
+	mate_p = re.compile(r'[-/._ ]([123])(:N:0:0)?$')
+	
+	global fastx_name_p
+	fastx_name_p = re.compile(r'^[@>](.+)[-/._ ][123](:N:0:0)?$')
 	
 	def __init__(self, infastx, verbose=True):
 		self.infastx = infastx
@@ -33,32 +34,47 @@ class Fastx:
 			print '    Initializing...'	
 
 	def __CheckFastx(self, level=5):
+		fmt = ''
 		assert type(level) == int and level >= 1
 		with open(self.infastx, 'r') as inf:
 			n, fasta_num, fastq_num, mate_num = 0, 0, 0, 0
+			next_sig = '+'
 			for i in xrange(level):
-				line = inf.readline().strip().split()[0]
+				line = inf.readline().strip()
 				if len(line) == 0:
 					break
 				if i % 2 == 0:
 					n += 1
 					sig = line[0]
-					if sig == '@' or sig == '+':
+					if sig == '@' and next_sig == '+':
 						fastq_num += 1
+						next_sig = '@'
+					elif sig == '+' and next_sig == '@':
+						fastq_num += 1
+						next_sig = '+'
 					elif sig == '>':
 						fasta_num += 1
-					if re.findall(mate_p, line) != []:
+					mate_sig = re.findall(mate_p, line)
+					if len(mate_sig) == 1:
 						mate_num += 1
-		if n == fastq_num:
-			fmt = 'fastq'
-		elif n == fasta_num:
-			fmt = 'fasta'
-		else:
-			fmt = 'E'
-		if n == mate_num:
-			self.mate = True
-		else:
-			self.mate = False
+		if fmt == '':
+			# 1. format
+			if n == fastq_num:
+				fmt = 'fastq'
+			# 2. paired or not
+				if mate_num == (level+3)/4:
+					self.mate = True
+				else:
+					self.mate = False
+			elif n == fasta_num:
+				fmt = 'fasta'
+			# 2. paired or not
+				if mate_num == n:
+					self.mate = True
+				else:
+					self.mate = False				
+			else:
+				fmt = 'error0'
 		return fmt
 	
 	def __FastqInfo(self):
@@ -70,18 +86,18 @@ class Fastx:
 				fastq4 = inputfile.readline().strip()
 				if fastq1 == '' or fastq2 == '' or fastq3 == '' or fastq4 == '':
 					break
-				fastq_name = fastq1.split()[0]
+				fastq_name = re.findall(fastx_name_p, fastq1)[0][0]
 				if self.mate:
-					pair_num = int(re.findall(mate_p, fastq_name)[0])
-					if self.fastx_dict.has_key(fastq_name[1:-2]):
-						self.fastx_dict[fastq_name[1:-2]].update({pair_num: [fastq1, fastq2, fastq3, fastq4]})
+					pair_num = int(re.findall(mate_p, fastq1)[0][0])
+					if self.fastx_dict.has_key(fastq_name):
+						self.fastx_dict[fastq_name].update({pair_num: [fastq1, fastq2, fastq3, fastq4]})
 					else:
-						self.fastx_dict[fastq_name[1:-2]] = deepcopy({pair_num: [fastq1, fastq2, fastq3, fastq4]})
+						self.fastx_dict[fastq_name] = deepcopy({pair_num: [fastq1, fastq2, fastq3, fastq4]})
 				else:
-					if self.fastx_dict.has_key(fastq_name[1:]):
-						self.fastx_dict[fastq_name[1:]].update({2: [fastq1, fastq2,fastq3,fastq4]})
+					if self.fastx_dict.has_key(fastq_name):
+						self.fastx_dict[fastq_name].update({2: [fastq1, fastq2,fastq3,fastq4]})
 					else:
-						self.fastx_dict.update({fastq_name[1:]:{1: [fastq1, fastq2, fastq3, fastq4]}})					
+						self.fastx_dict.update({fastq_name: {1: [fastq1, fastq2, fastq3, fastq4]}})					
 
 	def __FastaInfo(self):
 		with open(self.infastx, 'r') as inputfile:
@@ -90,29 +106,29 @@ class Fastx:
 				contig = contig.strip().split('\n', 1)
 				fasta1 = contig[0]
 				fasta2 = contig[-1].replace('\n', '')
-				fasta_name = fasta1.split()[0]
+				fasta_name = re.findall(fastx_name_p, ('>'+fastq1))[0][0]
 				if self.mate:
-					pair_num = int(re.findall(mate_p, fasta1)[0])
-					if self.fastx_dict.has_key(fasta_name[:-2]):
-						self.fastx_dict[fasta_name[:-2]].update({pair_num: ['>'+fasta1, fasta2]})
+					pair_num = int(re.findall(mate_p, fasta1)[0][0])
+					if self.fastx_dict.has_key(fasta_name):
+						self.fastx_dict[fasta_name].update({pair_num: ['>'+fasta1, fasta2]})
 					else:
-						self.fastx_dict[fasta_name[:-2]] = deepcopy({pair_num: ['>'+fasta1, fasta2]})
+						self.fastx_dict[fasta_name] = deepcopy({pair_num: ['>'+fasta1, fasta2]})
 				else:
 					if self.fastx_dict.has_key(fasta_name):
 						self.fastx_dict[fasta_name].update({2: ['>' + fasta1, fasta2]})
 					else:
 						self.fastx_dict[fasta_name] = deepcopy({1: ['>' + fasta1, fasta2]})			
 
-	def ExrtactInfo(self, returned=False):
+	def ExrtactInfo(self, returned=False, checklevel=5):
 		assert type(returned) == bool
-		fmt = self.__CheckFastx()
+		fmt = self.__CheckFastx(checklevel)
 		if fmt == 'fastq':
 			self.__FastqInfo()
 		elif fmt == 'fasta':
 			self.__FastaInfo()
 		else:
 			self.fastx_dict = {}
-			print '    It seems not a standard FASTA/FASTQ file. Please check your input.'
+			print self.__ErrorCode(fmt)
 		if returned:
 			return self.fastx_dict
 		
@@ -153,9 +169,17 @@ class Fastx:
 			print ''	
 
 	def ReleaseMemory(self):
-		"""For multiple input files, this method is recommended."""
+		"""For inputting multiple files at the same time, this method is recommended."""
 		del self.fastx_dict
 		gc.collect()
+		
+	def __ErrorCode(code):
+		error_code = {
+              'error0': '    It seems not a standard FASTA/FASTQ file. Please check your input.',
+		      'error1': "    Discordant paired numbers were found in reads' names."
+		}
+		default_error = '    Unknown error. Aborted.'
+		return error_code.get(code, default_error)
 
 def HelpMsg():
 	print '''
